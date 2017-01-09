@@ -13,26 +13,6 @@ import random
 import time
 from thread import *
 
-HOST = ''   
-PORT = 8888
-
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-print 'Socket created'
-
-try:
-   s.bind((HOST, PORT))
-except socket.error, msg:
-   print 'Bind failed. Error Code ' + str(msg[0]) + ': ' + msg[1]
-   sys.exit()
-
-print 'Socket bind complete'
-
-s.listen(10)
-print 'Socket now listening'
-
-running_tasks = []
-waiting_tasks = []
-
 def start_task(task):
    tasks.append(waiting_tasks[0])
    subprocess.call(task['cmd'], shell=True)
@@ -83,11 +63,33 @@ def clientthread(conn, running_tasks, waiting_tasks):
       pass
    conn.close()
 
-start_new_thread(handle_tasks, (running_tasks, waiting_tasks))
-while True:
-   conn, addr = s.accept()
-   print 'Connected with ' + addr[0] + ':' + str(addr[1])
-   start_new_thread(clientthread, (conn, running_tasks, waiting_tasks))
+if __name__ == '__main__':
+   HOST = ''   
+   PORT = 8888
+   running_tasks = []
+   waiting_tasks = []
 
-s.close()
+   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+   print 'Socket created'
+
+   try:
+      s.bind((HOST, PORT))
+   except socket.error, msg:
+      print 'Bind failed. Error Code ' + str(msg[0]) + ': ' + msg[1]
+      sys.exit()
+
+   print 'Socket bind complete'
+
+   s.listen(10)
+   print 'Socket now listening'
+
+   start_new_thread(handle_tasks, (running_tasks, waiting_tasks))
+   while True:
+      conn, addr = s.accept()
+      print 'Connected with ' + addr[0] + ':' + str(addr[1])
+      start_new_thread(clientthread, (conn, running_tasks, waiting_tasks))
+
+   s.close()
+
+
 
