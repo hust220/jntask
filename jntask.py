@@ -7,39 +7,36 @@
 import socket   #for sockets
 import sys  #for exit
 
-#create an INET, STREAMing socket
-try:
-   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-except socket.error:
-   print 'Failed to create socket'
-   sys.exit()
+def socket_create():
+   return socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-print 'Socket Created'
+def socket_connect(s, addr):
+   s.connect(addr)
+ 
+def socket_bind(s, addr):
+   try:
+      s.bind(addr)
+   except socket.error, msg:
+      print 'Bind failed. Error Code ' + str(msg[0]) + ': ' + msg[1]
+      sys.exit()
+ 
+def socket_listen(s, n):
+   s.listen(n)
 
-host = 'oschina.net';
-port = 80;
+def socket_send(s, m):
+   try:
+      s.sendall(m)
+   except socket.error:
+      print 'Send failed'
+      sys.exit()
 
-try:
-   remote_ip = socket.gethostbyname( host )
+def socket_recv(s, n):
+   return s.recv(n)
 
-except socket.gaierror:
-   print 'Hostname could not be resolved. Exiting'
-   sys.exit()
-
-#Connect to remote server
-#s.connect((remote_ip , port))
-s.connect(('127.0.0.1', 8888))
-
-print 'Socket Connected to ' + host + ' on ip ' + remote_ip
-
-#message = "GET / HTTP/1.1\r\nHost: oschina.net\r\n\r\n"
-message = raw_input("Content:")
-try:
-   s.sendall(message)
-except socket.error:
-   print 'Send failed'
-   sys.exit()
-print s.recv(1024)
-
-s.close()
+if __name__ == '__main__':
+   s = socket_create()
+   socket_connect(s, ('115.156.231.247', 8888))
+   socket_send(s, sys.argv[1])
+   print socket_recv(s, 1024)
+   s.close()
 

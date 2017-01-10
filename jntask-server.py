@@ -11,85 +11,116 @@ import json
 import subprocess
 import random
 import time
-from thread import *
+import thread
 
-def start_task(task):
-   tasks.append(waiting_tasks[0])
+MAX_TASKS = 8
+PORT = 8888
+LOG_FILE = "/var/log/jntask/tasks.log"
+
+def write_log(str):
+   f = open(LOG_FILE, 'a')
+   f.write(str)
+   f.close()
+
+def tasks_state(tasks):
+   return "running: %d, waiting: %d...\n" % (len(tasks['running']), len(tasks['waiting']))
+
+def sub_task(tasks, task):
+   write_log(tasks_state(tasks))
    subprocess.call(task['cmd'], shell=True)
+   rm_task(tasks['running'], task)
+   write_log(tasks_state(tasks))
 
-def handle_tasks(running_tasks, waiting_tasks):
+def start_task(tasks):
+   if len(tasks['waiting']) > 0:
+      task = tasks['waiting'][0]
+      tasks['running'].append(task)
+      del tasks['waiting'][0]
+      thread.start_new_thread(sub_task, (tasks, task))
+   write_log("running: %d, waiting: %d...\n" % (len(tasks['running']), len('waiting')))
+
+def handle_tasks(tasks):
    while True:
-      l = len(running_tasks)
-      n = 8 - l
-      while n > 0:
-         task = waiting_tasks[0]
-         id = task['id']
-         running_tasks.append(task)
-         rm_task(waiting_tasks, id)
-         subprocess.call(task['cmd'], shell=True)
-         rm_task(running_tasks, id)
-         n -= 1
+      while len(tasks['running']) < MAX_TASKS and len(tasks['waiting']) > 0:
+         start_task(tasks)
       time.sleep(3)
 
-def rm_task(tasks, id):
+def rm_task(tasks, task):
    n = 0
    for t in tasks:
-      if t['id'] == id:
+      if t['id'] == task['id']:
          del tasks[n]
          break
       n += 1
    return
 
-def clientthread(conn, running_tasks, waiting_tasks):
+def dict_cons(dist_, key_, val_):
+   d = {}
+   for i in dist_:
+      d[i] = dist_[i]
+   d[key_] = val_
+   return d
+
+def task_find(tasks_, cb_):
+   ls = []
+   for i in ['running', 'waiting']:
+      n = 0
+      for j in tasks_[i]:
+         if cb_(j):
+            t = dict_cons(j, 'state', i)
+            if i == 'waiting':
+               t['rank'] = n
+            ls.append(t)
+         n += 1
+   return ls
+
+def clientthread(conn, tasks):
    data = conn.recv(1024)
-   if data[0:4] == "TASK":
-      data = data[4:]
-      try:
-         task = json.loads(data)
-         if task['type'] == 'sub' and 'cmd' in task:
-            id = random.randint(1, 999999999)
-            conn.sendall(str(id))
-            task['id'] = id
-            waiting_tasks.append(task)
-         elif task['type'] == 'query':
-            id = int(task['id'])
-            conn.sendall('query')
-      except:
-         conn.sendall('-1')
-         print data
-   elif data[0:4] == "FILE":
-      pass
-   else:
-      pass
+   write_log("recieved: %s\n" % data)
+   try:
+      if data[0] == 'S':
+         task = json.loads(data[1:])
+         id = random.randint(1, 999999999)
+         conn.sendall(str(id))
+         task['id'] = id
+         tasks['waiting'].append(task)
+      elif data[0] == 'Q':
+         query = json.loads(data[1:])
+         if 'id' in query:
+            id = int(query['id'])
+            cb = lambda t : t['id'] == id
+         else:
+            cb = lambda : True
+         matched_tasks = task_find(tasks, cb)
+         conn.sendall(json.dumps(matched_tasks))
+   except:
+      conn.sendall('-1')
    conn.close()
 
-if __name__ == '__main__':
-   HOST = ''   
-   PORT = 8888
-   running_tasks = []
-   waiting_tasks = []
+def socket_create():
+   return socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-   print 'Socket created'
-
+def socket_bind(s, addr):
    try:
-      s.bind((HOST, PORT))
+      s.bind(addr)
    except socket.error, msg:
-      print 'Bind failed. Error Code ' + str(msg[0]) + ': ' + msg[1]
+      write_log("Bind Failed. Error code %d: %s\n" % (msg[0], msg[1]))
       sys.exit()
 
-   print 'Socket bind complete'
+def socket_listen(s, n):
+   s.listen(n)
 
-   s.listen(10)
-   print 'Socket now listening'
+if __name__ == '__main__':
+   tasks = {'running':[], 'waiting':[]}
+   s = socket_create()
+   socket_bind(s, ('', 8888))
+   socket_listen(s, 10)
 
-   start_new_thread(handle_tasks, (running_tasks, waiting_tasks))
+   thread.start_new_thread(handle_tasks, (tasks,))
    while True:
       conn, addr = s.accept()
-      print 'Connected with ' + addr[0] + ':' + str(addr[1])
-      start_new_thread(clientthread, (conn, running_tasks, waiting_tasks))
+      write_log("Connected with %s:%d...\n" % (addr[0], addr[1]))
+      thread.start_new_thread(clientthread, (conn, tasks))
 
    s.close()
-
-
 
