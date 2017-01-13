@@ -35,7 +35,7 @@ def socket_recv(s, n):
 
 if __name__ == '__main__':
    s = socket_create()
-   socket_connect(s, ('115.156.231.247', 8888))
+   socket_connect(s, ('127.0.0.1', 8888))
    socket_send(s, sys.argv[1])
    print socket_recv(s, 1024)
    s.close()
